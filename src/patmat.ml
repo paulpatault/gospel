@@ -535,16 +535,32 @@ let check_redundancy ~loc tyl pmat =
       let s =
         Fmt.str "@[%a@]" (list ~sep:comma Tterm_printer.print_pattern) next_row
       in
-      W.warning ~loc (W.Pattern_redundant s)
+      W.warning
+        ~loc:(Option.value (List.hd next_row).p_loc ~default:loc)
+        (W.Pattern_redundant s)
   done
 
 let check_exhaustive ~loc tyl pmat q bools =
   if usefulness tyl pmat q then
-    let pm = ui tyl pmat in
-    let s = Fmt.str "@[%a@]" Tterm_printer.print_pattern pm in
+    let p = ui tyl pmat in
+    let loc = Option.value p.p_loc ~default:loc in
     match bools with
-    | [] -> W.error ~loc (W.Pattern_not_exhaustive s)
-    | _ -> W.error ~loc (W.Pattern_guard_not_exhaustive s)
+    | [] ->
+        let s = Fmt.str "@[%a@]" Tterm_printer.print_pattern p in
+        W.error ~loc (W.Pattern_not_exhaustive s)
+    | _ ->
+        let n_whens = List.length bools in
+        let cc =
+          match p.p_node with
+          | Papp (c, pl) when is_fs_tuple c ->
+              let len = List.length pl in
+              List.filteri (fun i _ -> i + 1 >= len - n_whens) pl
+          | _ -> assert false
+        in
+        let s =
+          Fmt.str "@[%a@]" (list ~sep:comma Tterm_printer.print_pattern) cc
+        in
+        W.error ~loc (W.Pattern_guard_not_exhaustive s)
 
 let checks ~loc ty cases =
   try
